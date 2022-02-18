@@ -2,14 +2,6 @@
 use std::collections::HashMap;
 use std::ops::BitXor;
 
-fn uncurry<A, B, C>(f: fn(A, B) -> C) -> impl Fn((&A, &B)) -> C
-where
-    A: Copy,
-    B: Copy,
-{
-    move |(&x, &y)| f(x, y)
-}
-
 fn chal1(string: &str) -> Option<String> {
     hex::decode(string).ok().map(base64::encode)
 }
@@ -22,7 +14,7 @@ where
         .cycle()
         .zip(ys.iter().cycle())
         .take(xs.len().max(ys.len()))
-        .map(uncurry(BitXor::bitxor))
+        .map(|(&x, &y)| x ^ y)
         .collect()
 }
 
@@ -70,18 +62,22 @@ fn score(string: &str) -> f32 {
     }
 }
 
-fn chal3(string: &str) {
+fn chal3(string: &str) -> Option<String> {
     if let Ok(bytes) = hex::decode(string) {
-        let s = (0..=0xff)
+        return (0..=0xff)
             .filter_map(|i| String::from_utf8(xor(&bytes, &[i])).ok())
-            .max_by(|a, b| score(a).partial_cmp(&score(b)).unwrap())
-            .unwrap();
-        println!("{}: {}", score(&s), s);
+            .max_by(|a, b| score(a).partial_cmp(&score(b)).unwrap());
     }
+    None
+}
+
+fn chal5(plaintext: &str, key: &str) -> String {
+    let xored = xor(plaintext.as_bytes(), key.as_bytes());
+    hex::encode(xored)
 }
 
 fn main() {
-    chal3("1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736");
+    println!("Hello world");
 }
 
 #[cfg(test)]
@@ -108,5 +104,21 @@ mod test {
     }
 
     #[test]
-    fn test_chal3() {}
+    fn test_chal3() {
+        let expected = Some(String::from("Cooking MC's like a pound of bacon"));
+        assert_eq!(
+            expected,
+            chal3("1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736")
+        );
+    }
+
+    #[test]
+    fn test_chal5() {
+        let expected =
+            "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272\
+a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f";
+        let plaintext = "Burning 'em, if you ain't quick and nimble
+I go crazy when I hear a cymbal";
+        assert_eq!(expected, chal5(plaintext, "ICE"));
+    }
 }
