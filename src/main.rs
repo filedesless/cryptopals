@@ -6,14 +6,14 @@ fn chal1(string: &str) -> Option<String> {
     hex::decode(string).ok().map(base64::encode)
 }
 
-fn xor<T>(xs: &[T], ys: &[T]) -> Vec<T::Output>
+/// repeating-key xor
+fn xor<T>(string: &[T], key: &[T]) -> Vec<T::Output>
 where
     T: BitXor<T> + Copy,
 {
-    xs.iter()
-        .cycle()
-        .zip(ys.iter().cycle())
-        .take(xs.len().max(ys.len()))
+    string
+        .iter()
+        .zip(key.iter().cycle())
         .map(|(&x, &y)| x ^ y)
         .collect()
 }
@@ -65,31 +65,33 @@ fn score(string: &str) -> f32 {
 }
 
 /// Returns (key, score, plaintext)
-fn crack_single_byte_xor(string: &str) -> Option<(u8, f32, String)> {
-    if let Ok(bytes) = hex::decode(string) {
-        return (0..=0xff)
-            .filter_map(|i| {
-                String::from_utf8(xor(&bytes, &[i]))
-                    .ok()
-                    .map(|p| (i, score(&p), p))
-            })
-            .max_by(|(_, a, _), (_, b, _)| a.partial_cmp(b).unwrap());
-    }
-    None
+fn crack_single_byte_xor(bytes: &[u8]) -> Option<(u8, f32, String)> {
+    (0..=0xff)
+        .filter_map(|i| {
+            String::from_utf8(xor(bytes, &[i]))
+                .ok()
+                .map(|p| (i, score(&p), p))
+        })
+        .max_by(|(_, a, _), (_, b, _)| a.partial_cmp(b).unwrap())
 }
 
 fn chal3(string: &str) -> Option<String> {
-    crack_single_byte_xor(string).map(|(_, _, s)| s.clone())
+    hex::decode(string)
+        .map(|bytes| crack_single_byte_xor(&bytes).map(|(_, _, s)| s.clone()))
+        .ok()
+        .flatten()
 }
 
 /// tells whether a line has been encrypted with single-byte xor
 fn chal4() -> Option<String> {
     let input = include_str!("../data/4.txt");
     for line in input.lines() {
-        if let Some((_, s, line)) = crack_single_byte_xor(line) {
-            // println!("{}: {} {}", key, s, line);
-            if s > 0.5 {
-                return Some(line.clone());
+        if let Ok(bytes) = hex::decode(line) {
+            if let Some((_, s, line)) = crack_single_byte_xor(&bytes) {
+                // println!("{}: {} {}", key, s, line);
+                if s > 0.5 {
+                    return Some(line.clone());
+                }
             }
         }
     }
@@ -101,9 +103,52 @@ fn chal5(plaintext: &str, key: &str) -> String {
     hex::encode(xored)
 }
 
+fn hamming_distance(a: &[u8], b: &[u8]) -> usize {
+    xor(a, b).iter().map(|byte| byte.count_ones()).sum::<u32>() as usize
+}
+
+fn chal6() {
+    let lines = Vec::from_iter(include_str!("../data/6.txt").lines());
+    match base64::decode(lines.join("")) {
+        Ok(data) => {
+            // println!("data len: {}", data.len());
+            let figure_keysize = || {
+                (2..40).min_by(|&a, &b| {
+                    let f = |keysize| {
+                        let distances = data
+                            .chunks(keysize)
+                            .zip(data.chunks(keysize).skip(1))
+                            .map(|(a, b)| hamming_distance(a, b) as f32 / keysize as f32)
+                            .collect::<Vec<f32>>();
+                        distances.iter().sum::<f32>() / distances.len() as f32
+                    };
+                    f(a).partial_cmp(&f(b)).unwrap()
+                })
+            };
+            if let Some(keysize) = figure_keysize() {
+                // println!("keysize: {}", keysize);
+                let key: Vec<u8> = (0..keysize)
+                    .filter_map(|i| {
+                        let blocks = data.chunks(keysize);
+                        let transposed: Vec<u8> =
+                            blocks.map(|block| *block.get(i).unwrap_or(&0u8)).collect();
+                        crack_single_byte_xor(&transposed).map(|(bytekey, _, _)| bytekey)
+                    })
+                    .collect();
+                if let Ok(decrypted) = String::from_utf8(xor(&data, &key)) {
+                    println!("{}", decrypted);
+                }
+            }
+        }
+        Err(e) => {
+            println!("Error: {}", e);
+        }
+    }
+}
+
 fn main() {
     // println!("Hello world");
-    chal4();
+    chal6();
 }
 
 #[cfg(test)]
@@ -153,5 +198,13 @@ a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f";
         let plaintext = "Burning 'em, if you ain't quick and nimble
 I go crazy when I hear a cymbal";
         assert_eq!(expected, chal5(plaintext, "ICE"));
+    }
+
+    #[test]
+    fn test_hamming_distance() {
+        assert_eq!(
+            37,
+            hamming_distance("this is a test".as_bytes(), "wokka wokka!!!".as_bytes())
+        )
     }
 }
