@@ -40,13 +40,15 @@ fn freq(c: char) -> f32 {
         't' => 0.069509,
         'n' => 0.066544,
         's' => 0.057351,
+        'l' => 0.054893,
+        'c' => 0.045388,
         _ => 0.0,
     }
 }
 
 // string looks like english
 fn score(string: &str) -> f32 {
-    let printable = |c: char| c.is_alphanumeric() || c.is_ascii_punctuation() || c == ' ';
+    let printable = |c: char| c.is_alphanumeric() || c.is_ascii_punctuation() || c.is_whitespace();
     if string.chars().all(printable) {
         let mut counts = HashMap::<char, usize>::new();
         for c in string.chars() {
@@ -62,11 +64,34 @@ fn score(string: &str) -> f32 {
     }
 }
 
-fn chal3(string: &str) -> Option<String> {
+/// Returns (key, score, plaintext)
+fn crack_single_byte_xor(string: &str) -> Option<(u8, f32, String)> {
     if let Ok(bytes) = hex::decode(string) {
         return (0..=0xff)
-            .filter_map(|i| String::from_utf8(xor(&bytes, &[i])).ok())
-            .max_by(|a, b| score(a).partial_cmp(&score(b)).unwrap());
+            .filter_map(|i| {
+                String::from_utf8(xor(&bytes, &[i]))
+                    .ok()
+                    .map(|p| (i, score(&p), p))
+            })
+            .max_by(|(_, a, _), (_, b, _)| a.partial_cmp(b).unwrap());
+    }
+    None
+}
+
+fn chal3(string: &str) -> Option<String> {
+    crack_single_byte_xor(string).map(|(_, _, s)| s.clone())
+}
+
+/// tells whether a line has been encrypted with single-byte xor
+fn chal4() -> Option<String> {
+    let input = include_str!("../data/4.txt");
+    for line in input.lines() {
+        if let Some((_, s, line)) = crack_single_byte_xor(line) {
+            // println!("{}: {} {}", key, s, line);
+            if s > 0.5 {
+                return Some(line.clone());
+            }
+        }
     }
     None
 }
@@ -77,7 +102,8 @@ fn chal5(plaintext: &str, key: &str) -> String {
 }
 
 fn main() {
-    println!("Hello world");
+    // println!("Hello world");
+    chal4();
 }
 
 #[cfg(test)]
@@ -105,11 +131,18 @@ mod test {
 
     #[test]
     fn test_chal3() {
-        let expected = Some(String::from("Cooking MC's like a pound of bacon"));
         assert_eq!(
-            expected,
+            Some(String::from("Cooking MC's like a pound of bacon")),
             chal3("1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736")
         );
+    }
+
+    #[test]
+    fn test_chal4() {
+        assert_eq!(
+            Some(String::from("Now that the party is jumping\n")),
+            chal4()
+        )
     }
 
     #[test]
