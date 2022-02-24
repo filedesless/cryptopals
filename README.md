@@ -1,6 +1,6 @@
 # cryptopals
 
-my solutions to cryptopals (challenges)[https://cryptopals.com/]
+my solutions to cryptopals [challenges](https://cryptopals.com/)
 
 ## Build
 
